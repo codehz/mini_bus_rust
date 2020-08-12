@@ -1,6 +1,8 @@
 [package]
 name = "minibus"
 version = "0.1.0"
+description = "A minimal message bus server"
+license = "AGPL-3.0-or-later"
 authors = ["CodeHz <codehz@outlook.com>"]
 edition = "2018"
 
