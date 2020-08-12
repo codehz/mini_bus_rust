@@ -9,12 +9,9 @@ edition = "2018"
 [dependencies]
 anyhow = "1.0"
 async-std = { version = "1.6", features = ["attributes", "unstable"] }
-arrayvec = "0.5.1"
 async-trait = "0.1.36"
 rand = "0.7.3"
 weak-table = "0.3.0"
-owning_ref = "0.4.1"
-next-gen = "0.0.10"
 log = "0.4.11"
 pretty_env_logger = "0.4.0"
 inventory = "0.1.8"
