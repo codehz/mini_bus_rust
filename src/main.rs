@@ -15,12 +15,18 @@ mod registry;
 mod shared;
 mod short_text;
 mod utils;
+mod webgateway;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "minibus", about = "MiniBus Server Implemention")]
 struct Opt {
     #[structopt(short, long, default_value = "127.0.0.1:4040")]
     listen: String,
+
+    #[structopt(long = "webapi", default_value = "0.0.0.0:8234")]
+    webapi: String,
+    #[structopt(long = "webbase", default_value = "/")]
+    webbase: String,
 }
 
 #[async_std::main]
@@ -29,6 +35,11 @@ async fn main() -> Result<()> {
     pretty_env_logger::init();
     log::info!("option: {:#?}", &opt);
     Registry::init().await;
+
+    let mut app = tide::new();
+    webgateway::init(&mut app.at(&opt.webbase));
+    // app.at(&opt.webbase).get(|req| async { Ok("tes") });
+    task::spawn(app.listen(opt.webapi));
 
     let listener = net::TcpListener::bind(opt.listen).await?;
     let mut incoming = listener.incoming();

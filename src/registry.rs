@@ -63,7 +63,11 @@ impl Registry {
 
 #[async_trait]
 impl Entity for Registry {
-    async fn get(&self, _sender: &Arc<dyn Entity>, key: &ShortText) -> Result<Option<Vec<u8>>> {
+    async fn get(
+        &self,
+        _sender: Option<&Arc<dyn Entity>>,
+        key: &ShortText,
+    ) -> Result<Option<Vec<u8>>> {
         let guard = self.entities.lock().await;
         if guard.forward.contains_key(key) {
             Ok(None)
@@ -71,11 +75,16 @@ impl Entity for Registry {
             strerr("not found")
         }
     }
-    async fn set(&self, sender: &Arc<dyn Entity>, key: &ShortText, val: Vec<u8>) -> Result<()> {
+    async fn set(
+        &self,
+        sender: Option<&Arc<dyn Entity>>,
+        key: &ShortText,
+        val: Vec<u8>,
+    ) -> Result<()> {
         let mut guard = self.entities.lock().await;
         if guard.forward.contains_key(key) {
             strerr("duplicated")
-        } else {
+        } else if let Some(sender) = sender {
             if let Some(_) = guard.reverse.get(sender) {
                 strerr("too many names")
             } else {
@@ -90,36 +99,46 @@ impl Entity for Registry {
                     .await;
                 Ok(())
             }
+        } else {
+            strerr("not supported")
         }
     }
-    async fn del(&self, sender: &Arc<dyn Entity>, key: &ShortText) -> Result<()> {
+    async fn del(&self, sender: Option<&Arc<dyn Entity>>, key: &ShortText) -> Result<()> {
         let mut guard = self.entities.lock().await;
-        if let Some(target) = guard.forward.get(key) {
-            if ptr::eq(target.as_ref(), sender.as_ref()) {
-                get_event_broker()
-                    .send(
-                        EventKey(ShortText::build(b"registry"), key.to_owned()),
-                        None,
-                    )
-                    .await;
-                guard.forward.remove(key);
-                guard.reverse.remove(sender);
-                Ok(())
+        if let Some(sender) = sender {
+            if let Some(target) = guard.forward.get(key) {
+                if ptr::eq(target.as_ref(), sender.as_ref()) {
+                    get_event_broker()
+                        .send(
+                            EventKey(ShortText::build(b"registry"), key.to_owned()),
+                            None,
+                        )
+                        .await;
+                    guard.forward.remove(key);
+                    guard.reverse.remove(sender);
+                    Ok(())
+                } else {
+                    strerr("not allowned")
+                }
             } else {
-                strerr("not allowned")
+                strerr("not found")
             }
         } else {
-            strerr("not found")
+            strerr("not supported")
         }
     }
-    async fn keys(&self, sender: &Arc<dyn Entity>) -> Result<Vec<(ShortText, AccessTag)>> {
+    async fn keys(&self, sender: Option<&Arc<dyn Entity>>) -> Result<Vec<(ShortText, AccessTag)>> {
         let guard = self.entities.lock().await;
         let ret = guard
             .forward
             .iter()
             .map(|(key, value)| {
-                let tag = if ptr::eq(value.as_ref(), sender.as_ref()) {
-                    AccessTag::Public
+                let tag = if let Some(sender) = sender {
+                    if ptr::eq(value.as_ref(), sender.as_ref()) {
+                        AccessTag::Public
+                    } else {
+                        AccessTag::Protected
+                    }
                 } else {
                     AccessTag::Protected
                 };

@@ -82,7 +82,7 @@ async fn handle_loop<Reader: Read + Unpin + Send, Writer: 'static + Write + Unpi
                 if let Some(target) = Registry::get_global().find(&target).await {
                     let temp = Arc::clone(entity) as Arc<dyn Entity>;
                     let payload = target
-                        .set(&temp, &key, value)
+                        .set(Some(&temp), &key, value)
                         .await
                         .map_or_else(errtoresp, |_| ResponsePayload::Success);
                     entity
@@ -104,7 +104,7 @@ async fn handle_loop<Reader: Read + Unpin + Send, Writer: 'static + Write + Unpi
                 if let Some(target) = Registry::get_global().find(&target).await {
                     let temp = Arc::clone(&entity) as Arc<dyn Entity>;
                     let value = target
-                        .get(&temp, &key)
+                        .get(Some(&temp), &key)
                         .await
                         .map_or_else(errtoresp, |data| {
                             data.map_or(ResponsePayload::Success, |data| {
@@ -130,7 +130,7 @@ async fn handle_loop<Reader: Read + Unpin + Send, Writer: 'static + Write + Unpi
                 if let Some(target) = Registry::get_global().find(&target).await {
                     let temp = Arc::clone(&entity) as Arc<dyn Entity>;
                     let value = target
-                        .del(&temp, &key)
+                        .del(Some(&temp), &key)
                         .await
                         .map_or_else(errtoresp, |_| ResponsePayload::Success);
                     entity
@@ -150,7 +150,7 @@ async fn handle_loop<Reader: Read + Unpin + Send, Writer: 'static + Write + Unpi
                 let target = payload.decode_short_text().await?;
                 if let Some(target) = Registry::get_global().find(&target).await {
                     let temp = Arc::clone(&entity) as Arc<dyn Entity>;
-                    match target.keys(&temp).await {
+                    match target.keys(Some(&temp)).await {
                         Err(e) => {
                             entity
                                 .send(Response::new_resp(request.reqid, errtoresp(e)))

@@ -3,6 +3,25 @@ use std::mem::MaybeUninit;
 use std::ops::Deref;
 use std::ptr;
 use std::{borrow::Borrow, hash::Hash, str};
+use std::str::FromStr;
+
+#[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+pub struct CapacityError();
+
+const CAPERROR: &'static str = "insufficient capacity";
+
+impl fmt::Display for CapacityError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", CAPERROR)?;
+        Ok(())
+    }
+}
+impl fmt::Debug for CapacityError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", CAPERROR)?;
+        Ok(())
+    }
+}
 
 #[derive(Copy)]
 pub struct ShortText(u8, [u8; 256]);
@@ -16,7 +35,7 @@ impl ShortText {
         self.u8len() as usize
     }
 
-    pub fn build(text: &'static [u8]) -> ShortText {
+    pub fn build(text: &[u8]) -> ShortText {
         unsafe {
             let mut ret = ShortText(text.len() as u8, MaybeUninit::zeroed().assume_init());
             ret.1[..text.len()].copy_from_slice(text);
@@ -30,6 +49,17 @@ impl ShortText {
 
     pub unsafe fn get_buffer(&mut self) -> &mut [u8] {
         &mut self.1[0..self.0 as usize]
+    }
+}
+
+impl FromStr for ShortText {
+    type Err = CapacityError;
+    fn from_str(s: &str) -> Result<Self, CapacityError> {
+        let bytes = s.as_bytes();
+        if bytes.len() > 256 {
+            return Err(CapacityError());
+        }
+        Ok(Self::build(bytes))
     }
 }
 

@@ -6,10 +6,10 @@ use async_std::io::{Read, Result, Write};
 use async_std::prelude::*;
 use async_std::sync::{Arc, Mutex, Weak};
 use async_trait::async_trait;
-use std::collections::{BTreeMap, HashMap};
 use log::debug;
+use std::collections::{BTreeMap, HashMap};
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Copy)]
 pub enum AccessTag {
     Private,
     Protected,
@@ -49,10 +49,19 @@ pub struct ValueWithAccess(Option<Vec<u8>>, AccessTag);
 #[async_trait]
 pub trait Entity: Sync + Send {
     async fn update_name(&self, _name: Option<&ShortText>) {}
-    async fn get(&self, sender: &Arc<dyn Entity>, key: &ShortText) -> Result<Option<Vec<u8>>>;
-    async fn set(&self, sender: &Arc<dyn Entity>, key: &ShortText, val: Vec<u8>) -> Result<()>;
-    async fn del(&self, sender: &Arc<dyn Entity>, key: &ShortText) -> Result<()>;
-    async fn keys(&self, sender: &Arc<dyn Entity>) -> Result<Vec<(ShortText, AccessTag)>>;
+    async fn get(
+        &self,
+        sender: Option<&Arc<dyn Entity>>,
+        key: &ShortText,
+    ) -> Result<Option<Vec<u8>>>;
+    async fn set(
+        &self,
+        sender: Option<&Arc<dyn Entity>>,
+        key: &ShortText,
+        val: Vec<u8>,
+    ) -> Result<()>;
+    async fn del(&self, sender: Option<&Arc<dyn Entity>>, key: &ShortText) -> Result<()>;
+    async fn keys(&self, sender: Option<&Arc<dyn Entity>>) -> Result<Vec<(ShortText, AccessTag)>>;
     async fn call(
         &self,
         _sender: &Arc<dyn EntityReceiver>,
@@ -66,8 +75,8 @@ pub trait Entity: Sync + Send {
 
 #[async_trait]
 pub trait EntityReceiver: Sync + Send {
-    async fn assign_call_ids(&self, reqid: u32, resid: u32);
-    async fn remove_call_id(&self, resid: u32);
+    async fn assign_call_ids(&self, _reqid: u32, _resid: u32) {}
+    async fn remove_call_id(&self, _resid: u32) {}
     async fn call_resp(&self, reqid: u32, val: ResponsePayload);
 }
 
@@ -146,7 +155,11 @@ impl<Writer: 'static + Write + Unpin + Send> Entity for ExternalEntity<Writer> {
         *guard = name.map(|x| x.to_owned());
     }
 
-    async fn get(&self, _sender: &Arc<dyn Entity>, key: &ShortText) -> Result<Option<Vec<u8>>> {
+    async fn get(
+        &self,
+        _sender: Option<&Arc<dyn Entity>>,
+        key: &ShortText,
+    ) -> Result<Option<Vec<u8>>> {
         let guard = self.kvstore.lock().await;
         match guard.get(key) {
             Some(ValueWithAccess(_, AccessTag::Private)) => strerr("not allowed"),
@@ -154,7 +167,12 @@ impl<Writer: 'static + Write + Unpin + Send> Entity for ExternalEntity<Writer> {
             None => strerr("not found"),
         }
     }
-    async fn set(&self, _sender: &Arc<dyn Entity>, key: &ShortText, val: Vec<u8>) -> Result<()> {
+    async fn set(
+        &self,
+        _sender: Option<&Arc<dyn Entity>>,
+        key: &ShortText,
+        val: Vec<u8>,
+    ) -> Result<()> {
         let mut guard = self.kvstore.lock().await;
         match guard.get_mut(key) {
             Some(ValueWithAccess(value, AccessTag::Public)) => {
@@ -170,7 +188,7 @@ impl<Writer: 'static + Write + Unpin + Send> Entity for ExternalEntity<Writer> {
             None => strerr("not found"),
         }
     }
-    async fn del(&self, _sender: &Arc<dyn Entity>, key: &ShortText) -> Result<()> {
+    async fn del(&self, _sender: Option<&Arc<dyn Entity>>, key: &ShortText) -> Result<()> {
         let mut guard = self.kvstore.lock().await;
         match guard.get_mut(key) {
             Some(ValueWithAccess(value, AccessTag::Public)) => {
@@ -187,7 +205,7 @@ impl<Writer: 'static + Write + Unpin + Send> Entity for ExternalEntity<Writer> {
         }
     }
 
-    async fn keys(&self, _sender: &Arc<dyn Entity>) -> Result<Vec<(ShortText, AccessTag)>> {
+    async fn keys(&self, _sender: Option<&Arc<dyn Entity>>) -> Result<Vec<(ShortText, AccessTag)>> {
         let guard = self.kvstore.lock().await;
         let ret = guard
             .iter()

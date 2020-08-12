@@ -22,7 +22,7 @@ impl SharedStorage {}
 impl Entity for SharedStorage {
     async fn get(
         &self,
-        _sender: &Arc<dyn Entity>,
+        _sender: Option<&Arc<dyn Entity>>,
         key: &ShortText,
     ) -> std::io::Result<Option<Vec<u8>>> {
         let guard = self.data.lock().await;
@@ -31,7 +31,7 @@ impl Entity for SharedStorage {
     }
     async fn set(
         &self,
-        _sender: &Arc<dyn Entity>,
+        _sender: Option<&Arc<dyn Entity>>,
         key: &ShortText,
         val: Vec<u8>,
     ) -> std::io::Result<()> {
@@ -45,7 +45,7 @@ impl Entity for SharedStorage {
         guard.insert(key.to_owned(), val);
         Ok(())
     }
-    async fn del(&self, _sender: &Arc<dyn Entity>, key: &ShortText) -> std::io::Result<()> {
+    async fn del(&self, _sender: Option<&Arc<dyn Entity>>, key: &ShortText) -> std::io::Result<()> {
         let mut guard = self.data.lock().await;
         get_event_broker()
             .send(EventKey(ShortText::build(b"shared"), key.to_owned()), None)
@@ -55,7 +55,7 @@ impl Entity for SharedStorage {
     }
     async fn keys(
         &self,
-        _sender: &Arc<dyn Entity>,
+        _sender: Option<&Arc<dyn Entity>>,
     ) -> std::io::Result<Vec<(ShortText, AccessTag)>> {
         let guard = self.data.lock().await;
         let ret = guard
