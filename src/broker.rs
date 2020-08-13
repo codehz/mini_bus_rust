@@ -1,9 +1,10 @@
 use crate::short_text::ShortText;
 use async_std::sync::{Arc, Mutex, Weak};
 use async_trait::async_trait;
+use log::debug;
+use multimap::MultiMap;
 use std::collections::HashMap;
 use weak_table::PtrWeakHashSet;
-use log::debug;
 
 #[async_trait]
 pub trait NotifyReceiver: Send + Sync {
@@ -34,11 +35,17 @@ impl GeneralReceiver for dyn EventReceiver {
     }
 }
 
+#[async_trait]
+pub trait AlternativeReceiver: Send + Sync {
+    async fn receive(&self, data: Option<&[u8]>) -> bool;
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct EventKey(pub ShortText, pub ShortText);
 
 pub struct Broker<Receiver: GeneralReceiver + ?Sized + Send + Sync> {
     map: Mutex<HashMap<EventKey, PtrWeakHashSet<Weak<Receiver>>>>,
+    alt_map: Mutex<MultiMap<EventKey, Box<dyn AlternativeReceiver>>>,
 }
 
 pub fn get_notify_broker() -> &'static Broker<dyn NotifyReceiver> {
@@ -61,15 +68,29 @@ impl<Receiver: GeneralReceiver + ?Sized + Send + Sync> Broker<Receiver> {
     fn new() -> Self {
         Broker {
             map: Mutex::new(HashMap::new()),
+            alt_map: Mutex::new(MultiMap::new()),
         }
     }
 
     pub async fn send(&self, key: EventKey, data: Option<&[u8]>) {
         debug!("broadcast({:?}): {:?}", &key, &data);
-        let guard = self.map.lock().await;
-        if let Some(set) = guard.get(&key) {
+        let map = self.map.lock().await;
+        if let Some(set) = map.get(&key) {
             for item in set {
                 item.receive(&key, data).await;
+            }
+        }
+        drop(map);
+        let mut alt_map = self.alt_map.lock().await;
+        if let Some(list) = alt_map.get_vec_mut(&key) {
+            let mut deleted = Vec::new();
+            for (idx, item) in list.iter().enumerate() {
+                if !item.receive(data).await {
+                    deleted.push(idx);
+                }
+            }
+            for idx in deleted.iter().rev() {
+                list.remove(*idx);
             }
         }
     }
@@ -83,6 +104,11 @@ impl<Receiver: GeneralReceiver + ?Sized + Send + Sync> Broker<Receiver> {
             temp.insert(sender);
             guard.insert(key, temp);
         }
+    }
+
+    pub async fn alternative_register(&self, recv: Box<dyn AlternativeReceiver>, key: EventKey) {
+        let mut guard = self.alt_map.lock().await;
+        guard.insert(key, recv);
     }
 
     pub async fn cleanup(&self) {
