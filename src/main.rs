@@ -38,7 +38,6 @@ async fn main() -> Result<()> {
 
     let mut app = tide::new();
     webgateway::init(&mut app.at(&opt.webbase));
-    // app.at(&opt.webbase).get(|req| async { Ok("tes") });
     task::spawn(app.listen(opt.webapi));
 
     let listener = net::TcpListener::bind(opt.listen).await?;
